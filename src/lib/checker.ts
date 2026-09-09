@@ -13,7 +13,6 @@ import {
   isParameterIdentifier,
   literalValue,
   loc,
-  looksLikeClient,
   objectKeys,
   optionString,
   propName,
@@ -21,6 +20,7 @@ import {
   unwrapExpr,
 } from "../utils/ast";
 import { relPath } from "../utils/files";
+import { looksLikeClient } from "../utils/clients";
 import { AGGREGATES, DEFAULT_SCHEMA, FILTER_COLUMN_METHODS, JOIN_HINTS, QUERY_METHODS, SKIP_CHAIN_PROPS } from "../utils/paths";
 import { lookupTarget, pointsTo } from "./catalog";
 import { calleeFunction, propertyNamesFromType } from "./program";
@@ -46,6 +46,7 @@ export interface CheckerOptions {
   sf: ts.SourceFile;
   consts: Map<string, string>;
   tsChecker?: ts.TypeChecker;
+  clientNames?: Set<string>;
   subst?: Map<string, string>;
   instantiated?: Set<string>;
   pendingAny?: PendingAnyPayload[];
@@ -60,6 +61,7 @@ export class Checker {
   private readonly sf: ts.SourceFile;
   private readonly consts: Map<string, string>;
   private readonly tsChecker?: ts.TypeChecker;
+  private readonly clientNames: Set<string>;
   private readonly subst: Map<string, string>;
   private readonly instantiated: Set<string>;
   private readonly pendingAny: PendingAnyPayload[];
@@ -70,6 +72,7 @@ export class Checker {
     this.sf = opts.sf;
     this.consts = opts.consts;
     this.tsChecker = opts.tsChecker;
+    this.clientNames = opts.clientNames ?? new Set();
     this.subst = opts.subst ?? new Map();
     this.instantiated = opts.instantiated ?? new Set();
     this.pendingAny = opts.pendingAny ?? [];
@@ -111,6 +114,7 @@ export class Checker {
       sf,
       consts: this.consts,
       tsChecker: this.tsChecker,
+      clientNames: this.clientNames,
       subst,
       instantiated: this.instantiated,
       pendingAny: this.pendingAny,
@@ -274,7 +278,7 @@ export class Checker {
       const mutating = methods.some((m) =>
         ["select", "insert", "update", "upsert", "delete"].includes(m.name),
       );
-      if (!mutating && !looksLikeClient(tail)) return;
+      if (!mutating && !looksLikeClient(tail, { checker: this.tsChecker, names: this.clientNames })) return;
     }
 
     let schema = continued?.relation.schema ?? DEFAULT_SCHEMA;

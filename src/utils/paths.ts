@@ -63,9 +63,3 @@ export const QUERY_METHODS = new Set([
   "csv",
   "explain",
 ]);
-
-export const CLIENT_NAMES = new Set([
-  "supabase",
-  "supabaseClient",
-  "createClient",
-]);

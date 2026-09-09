@@ -2,7 +2,7 @@ import ts from "typescript";
 
 import { stringLiteralsFromType } from "../lib/program";
 import type { MethodCall } from "../lib/types";
-import { CLIENT_NAMES, QUERY_METHODS } from "./paths";
+import { QUERY_METHODS } from "./paths";
 
 export function loc(sf: ts.SourceFile, node: ts.Node): { line: number; column: number } {
   const { line, character } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
@@ -232,10 +232,6 @@ export function isChainTail(node: ts.CallExpression): boolean {
     return false;
   }
   return true;
-}
-
-export function looksLikeClient(tail: ts.CallExpression): boolean {
-  return chainProps(tail.expression).some((n) => CLIENT_NAMES.has(n));
 }
 
 export function assignedName(tail: ts.CallExpression): string | null {

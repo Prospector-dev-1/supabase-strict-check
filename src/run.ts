@@ -8,6 +8,7 @@ import { loadCatalog } from "./lib/catalog";
 import { Checker, flushUnhitAnyPayloads, type PendingAnyPayload } from "./lib/checker";
 import { createBackendProgram } from "./lib/program";
 import type { QueryError } from "./lib/types";
+import { collectClientNames } from "./utils/clients";
 import { collectSourceFiles, fileConsts, loadImportedConsts } from "./utils/files";
 
 function formatIssue(issue: QueryError, kind: "error" | "warning"): string {
@@ -22,6 +23,7 @@ export async function run(): Promise<void> {
   const srcDir = fs.existsSync(path.join(target, "src")) ? path.join(target, "src") : target;
   const program = createBackendProgram(target, files, types);
   const tsChecker = program.getTypeChecker();
+  const clientNames = collectClientNames(program, tsChecker);
   const imported = loadImportedConsts(files, srcDir);
 
   const errors: QueryError[] = [];
@@ -34,6 +36,7 @@ export async function run(): Promise<void> {
     sf,
     consts: fileConsts(sf, imported),
     tsChecker,
+    clientNames,
     instantiated,
     pendingAny,
     errors,
