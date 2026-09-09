@@ -1,4 +1,7 @@
-# supabase-strict-check
+# Supabase Strict Check
+
+[![npm](https://img.shields.io/npm/v/supabase-strict-check)](https://www.npmjs.com/package/supabase-strict-check)
+[![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 Checker for PostgREST/Supabase client queries against generated `Database` types.
 
@@ -6,10 +9,37 @@ It walks TypeScript source, resolves `.from()`, `.select()`, filters, inserts/up
 
 ## Quick start
 
+### Install
+
 ```bash
-npm install -g supabase-strict-check
-supabase-strict-check --target=src --types=src/types/supabase.ts
+npm install --save-dev supabase-strict-check
 ```
+
+### Run
+
+```bash
+# Note: DO NOT START THE PATH WITH A `/`
+npx supabase-strict-check --target=src --types=src/types/database.types.ts
+```
+
+OR
+
+```bash
+# This will prompt you for the target and types paths
+npx supabase-strict-check
+```
+
+### Tip
+
+Add a script to your `package.json`:
+
+```json
+"scripts": {
+  "check:supabase-strict": "supabase-strict-check --target=src --types=src/types/database.types.ts"
+}
+```
+
+Then run `npm run check:supabase`.
 
 ## Flags
 
