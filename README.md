@@ -1,5 +1,6 @@
 # Supabase Strict Check
 > Checker for PostgREST/Supabase client queries against generated `Database` types.
+
 [![npm](https://img.shields.io/npm/v/supabase-strict-check)](https://www.npmjs.com/package/supabase-strict-check)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
