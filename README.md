@@ -5,6 +5,8 @@
 
 Checker for PostgREST/Supabase client queries against generated `Database` types.
 
+**This is not an official Supabase package.** It is an independent community tool and is not affiliated with, endorsed by, or maintained by Supabase.
+
 It walks TypeScript source, resolves `.from()`, `.select()`, filters, inserts/updates, and RPC calls, and reports columns, relations, and payloads that do not match the generated types file.
 
 ## Quick start
