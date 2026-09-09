@@ -4,6 +4,7 @@
 [![npm](https://img.shields.io/npm/v/supabase-strict-check)](https://www.npmjs.com/package/supabase-strict-check)
 [![license](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
+[![Contributing](https://img.shields.io/badge/contributions-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
 **This is not an official Supabase package.** It is an independent community tool and is not affiliated with, endorsed by, or maintained by Supabase.
 
