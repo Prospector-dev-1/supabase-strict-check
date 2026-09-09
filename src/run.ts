@@ -3,13 +3,12 @@ import path from "node:path";
 
 import ts from "typescript";
 
-import { loadCatalog } from "./catalog";
-import { Checker, flushUnhitAnyPayloads, type PendingAnyPayload } from "./checker";
 import { resolveCliPaths } from "./cli";
-import { collectSourceFiles, fileConsts, loadImportedConsts } from "./files";
-import { parseDbTableMap } from "./helpers";
-import { createBackendProgram } from "./program";
-import type { QueryError } from "./types";
+import { loadCatalog } from "./lib/catalog";
+import { Checker, flushUnhitAnyPayloads, type PendingAnyPayload } from "./lib/checker";
+import { createBackendProgram } from "./lib/program";
+import type { QueryError } from "./lib/types";
+import { collectSourceFiles, fileConsts, loadImportedConsts } from "./utils/files";
 
 function formatIssue(issue: QueryError, kind: "error" | "warning"): string {
   return `${kind} ${issue.file}:${issue.line}:${issue.column}  ${issue.message}`;
@@ -24,12 +23,6 @@ export async function run(): Promise<void> {
   const program = createBackendProgram(target, files, types);
   const tsChecker = program.getTypeChecker();
   const imported = loadImportedConsts(files, srcDir);
-  const dbTables = new Map();
-  for (const file of files) {
-    if (!file.replace(/\\/g, "/").endsWith("/lib/fundingPortal/modules/common/db.ts")) continue;
-    const sf = program.getSourceFile(file);
-    if (sf) parseDbTableMap(sf, catalog).forEach((v, k) => dbTables.set(k, v));
-  }
 
   const errors: QueryError[] = [];
   const warnings: QueryError[] = [];
@@ -41,7 +34,6 @@ export async function run(): Promise<void> {
     sf,
     consts: fileConsts(sf, imported),
     tsChecker,
-    dbTables,
     instantiated,
     pendingAny,
     errors,

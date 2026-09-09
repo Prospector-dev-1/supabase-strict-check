@@ -1,8 +1,8 @@
 import ts from "typescript";
 
-import { CLIENT_NAMES, COLUMN_HELPERS, QUERY_METHODS } from "./paths";
-import { stringLiteralsFromType } from "./program";
-import type { MethodCall } from "./types";
+import { stringLiteralsFromType } from "../lib/program";
+import type { MethodCall } from "../lib/types";
+import { CLIENT_NAMES, QUERY_METHODS } from "./paths";
 
 export function loc(sf: ts.SourceFile, node: ts.Node): { line: number; column: number } {
   const { line, character } = sf.getLineAndCharacterOfPosition(node.getStart(sf));
@@ -67,17 +67,6 @@ export function evalString(
       if (lits?.length === 1) return lits[0];
     }
     return null;
-  }
-  if (ts.isCallExpression(node)) {
-    const callee = unwrapExpr(node.expression);
-    const name = ts.isIdentifier(callee)
-      ? callee.text
-      : ts.isPropertyAccessExpression(callee)
-        ? callee.name.text
-        : null;
-    if (name && COLUMN_HELPERS.has(name) && node.arguments[0]) {
-      return evalString(node.arguments[0], consts, opts);
-    }
   }
   if (opts?.checker) {
     const lits = stringLiteralsFromType(opts.checker.getTypeAtLocation(node));
@@ -146,9 +135,10 @@ export function bindingHasIdent(name: ts.BindingName, ident: string): boolean {
 export function enclosingParam(ident: ts.Identifier): { fn: ts.FunctionLikeDeclaration; index: number } | null {
   let current: ts.Node | undefined = ident.parent;
   while (current) {
-    if (ts.isFunctionLike(current)) {
-      const index = current.parameters.findIndex((p) => bindingHasIdent(p.name, ident.text));
-      if (index >= 0) return { fn: current, index };
+    if (ts.isFunctionLike(current) && "body" in current) {
+      const fn = current as ts.FunctionLikeDeclaration;
+      const index = fn.parameters.findIndex((p) => bindingHasIdent(p.name, ident.text));
+      if (index >= 0) return { fn, index };
     }
     current = current.parent;
   }
@@ -202,7 +192,7 @@ export function collectChain(tail: ts.CallExpression): MethodCall[] {
   while (current && ts.isCallExpression(current)) {
     if (ts.isPropertyAccessExpression(current.expression)) {
       const name = current.expression.name.text;
-      if (!QUERY_METHODS.has(name) && name !== "table") break;
+      if (!QUERY_METHODS.has(name)) break;
       methods.push({
         name,
         args: [...current.arguments] as ts.Expression[],
@@ -210,13 +200,6 @@ export function collectChain(tail: ts.CallExpression): MethodCall[] {
       });
       current = current.expression.expression;
       continue;
-    }
-    if (ts.isIdentifier(current.expression) && current.expression.text === "table") {
-      methods.push({
-        name: "table",
-        args: [...current.arguments] as ts.Expression[],
-        node: current,
-      });
     }
     break;
   }
@@ -229,7 +212,7 @@ export function chainRoot(tail: ts.CallExpression): ts.Expression | undefined {
   while (current && ts.isCallExpression(current)) {
     if (ts.isPropertyAccessExpression(current.expression)) {
       const name = current.expression.name.text;
-      if (!QUERY_METHODS.has(name) && name !== "table") break;
+      if (!QUERY_METHODS.has(name)) break;
       current = current.expression.expression;
       continue;
     }
@@ -244,7 +227,7 @@ export function isChainTail(node: ts.CallExpression): boolean {
     ts.isPropertyAccessExpression(parent)
     && ts.isCallExpression(parent.parent)
     && parent.parent.expression === parent
-    && (QUERY_METHODS.has(parent.name.text) || parent.name.text === "table")
+    && QUERY_METHODS.has(parent.name.text)
   ) {
     return false;
   }

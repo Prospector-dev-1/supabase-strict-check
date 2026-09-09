@@ -19,29 +19,15 @@ import {
   propName,
   stringish,
   unwrapExpr,
-} from "./ast";
+} from "../utils/ast";
+import { relPath } from "../utils/files";
+import { AGGREGATES, DEFAULT_SCHEMA, FILTER_COLUMN_METHODS, JOIN_HINTS, QUERY_METHODS, SKIP_CHAIN_PROPS } from "../utils/paths";
 import { lookupTarget, pointsTo } from "./catalog";
-import { relPath } from "./files";
-import { camelToSnake, dbCall, DB_PAYLOAD_METHODS } from "./helpers";
-import { AGGREGATES, DEFAULT_SCHEMA, FILTER_COLUMN_METHODS, JOIN_HINTS, QUERY_METHODS, SKIP_CHAIN_PROPS } from "./paths";
 import { calleeFunction, propertyNamesFromType } from "./program";
 import { filterColumns, parseSelectList } from "./select";
 import { Scope } from "./scope";
-import type { Catalog, MethodCall, QueryBinding, QueryError, Relation, Relationship, SelectItem } from "./types";
+import type { Catalog, MethodCall, QueryError, Relation, Relationship, SelectItem } from "./types";
 import { relKey } from "./types";
-
-const SKIP_INSTANTIATE = new Set([
-  "applyWhere",
-  "logDbQuery",
-  "logDbMutation",
-  "toInsert",
-  "toUpdate",
-  "toRow",
-  "fromRow",
-  "asColumn",
-  "fail",
-  "camelToSnake",
-]);
 
 export interface PendingAnyPayload {
   fn: ts.FunctionLikeDeclaration;
@@ -50,7 +36,6 @@ export interface PendingAnyPayload {
   kind: string;
   allowed: Set<string>;
   checkRequired: boolean;
-  snakeCase: boolean;
   origin: ts.Node;
   hits: number;
   seenCalls: Set<string>;
@@ -61,7 +46,6 @@ export interface CheckerOptions {
   sf: ts.SourceFile;
   consts: Map<string, string>;
   tsChecker?: ts.TypeChecker;
-  dbTables?: Map<string, Relation>;
   subst?: Map<string, string>;
   instantiated?: Set<string>;
   pendingAny?: PendingAnyPayload[];
@@ -76,7 +60,6 @@ export class Checker {
   private readonly sf: ts.SourceFile;
   private readonly consts: Map<string, string>;
   private readonly tsChecker?: ts.TypeChecker;
-  private readonly dbTables: Map<string, Relation>;
   private readonly subst: Map<string, string>;
   private readonly instantiated: Set<string>;
   private readonly pendingAny: PendingAnyPayload[];
@@ -87,7 +70,6 @@ export class Checker {
     this.sf = opts.sf;
     this.consts = opts.consts;
     this.tsChecker = opts.tsChecker;
-    this.dbTables = opts.dbTables ?? new Map();
     this.subst = opts.subst ?? new Map();
     this.instantiated = opts.instantiated ?? new Set();
     this.pendingAny = opts.pendingAny ?? [];
@@ -129,7 +111,6 @@ export class Checker {
       sf,
       consts: this.consts,
       tsChecker: this.tsChecker,
-      dbTables: this.dbTables,
       subst,
       instantiated: this.instantiated,
       pendingAny: this.pendingAny,
@@ -145,7 +126,6 @@ export class Checker {
       if (this.resolvingPending) {
         this.applyPendingAtCall(node, next);
       } else {
-        this.checkDbCall(node, next);
         this.maybeInstantiate(node);
         if (isChainTail(node)) this.checkTail(node, next);
       }
@@ -165,14 +145,12 @@ export class Checker {
     if (!this.tsChecker) return;
     if (ts.isPropertyAccessExpression(call.expression)) {
       const method = call.expression.name.text;
-      if (QUERY_METHODS.has(method) || method === "table" || SKIP_CHAIN_PROPS.has(method)) return;
+      if (QUERY_METHODS.has(method) || SKIP_CHAIN_PROPS.has(method)) return;
     }
     const fn = calleeFunction(call, this.tsChecker);
     if (!fn) return;
     const file = fn.getSourceFile().fileName;
     if (file.includes("node_modules") || file.endsWith(".d.ts")) return;
-    const name = functionName(fn);
-    if (name && SKIP_INSTANTIATE.has(name)) return;
     const subst = this.substFromCall(fn, call);
     if (!subst) return;
     if (sameSubst(subst, this.subst)) return;
@@ -210,7 +188,6 @@ export class Checker {
             kind: pending.kind,
             allowed: pending.allowed,
             checkRequired: pending.checkRequired,
-            snakeCase: pending.snakeCase,
             origin: pending.origin,
             hits: 0,
             seenCalls: new Set(),
@@ -227,7 +204,6 @@ export class Checker {
         pending.allowed,
         scope,
         pending.checkRequired,
-        pending.snakeCase,
         arg,
         "callsite",
       );
@@ -278,54 +254,13 @@ export class Checker {
     return bound ? subst : null;
   }
 
-  private checkDbCall(call: ts.CallExpression, scope: Scope): void {
-    const parsed = dbCall(call);
-    if (!parsed || !DB_PAYLOAD_METHODS.has(parsed.method)) return;
-    const relation = this.dbTables.get(parsed.alias);
-    if (!relation) return;
-
-    const snake = true;
-    if (parsed.method === "update") {
-      this.checkPayload(relation, call.arguments[1], "update", relation.updateColumns, scope, false, snake, call);
-      return;
-    }
-    if (parsed.method === "appendIfAbsent") {
-      this.checkPayload(relation, call.arguments[0], "insert", relation.insertColumns, scope, true, snake, call);
-      if (call.arguments[1]) {
-        const col = this.str(call.arguments[1]);
-        if (col == null) {
-          this.fail(call.arguments[1], `appendIfAbsent on ${relKey(relation.schema, relation.name)}: dynamic conflict column`);
-        } else if (!relation.columns.has(col)) {
-          this.fail(call.arguments[1], `appendIfAbsent onConflict column "${col}" is not on ${relKey(relation.schema, relation.name)}`);
-        }
-      }
-      return;
-    }
-    if (parsed.method === "findOne" || parsed.method === "findMany") {
-      if (!call.arguments[0]) return;
-      this.checkPayload(relation, call.arguments[0], parsed.method, relation.columns, scope, false, snake, call);
-      return;
-    }
-    const requireInsert = parsed.method === "insert" || parsed.method === "append";
-    this.checkPayload(
-      relation,
-      call.arguments[0],
-      parsed.method === "upsert" ? "upsert" : "insert",
-      parsed.method === "upsert" ? relation.insertColumns : relation.insertColumns,
-      scope,
-      requireInsert,
-      snake,
-      call,
-    );
-  }
-
   private checkTail(tail: ts.CallExpression, scope: Scope): void {
     if (chainProps(tail.expression).some((n) => SKIP_CHAIN_PROPS.has(n))) return;
 
     const methods = collectChain(tail);
     if (methods.length === 0) return;
 
-    const fromCall = methods.find((m) => m.name === "from" || m.name === "table");
+    const fromCall = methods.find((m) => m.name === "from");
     const rpcCall = methods.find((m) => m.name === "rpc");
     const schemaCall = methods.find((m) => m.name === "schema");
     if (fromCall?.name === "from" && isArrayFrom(fromCall)) return;
@@ -362,8 +297,6 @@ export class Checker {
         return;
       }
       schema = schemaName;
-    } else if (fromCall?.name === "table") {
-      schema = this.consts.get("SCHEMA") ?? this.subst.get("SCHEMA") ?? "funding_portal";
     }
 
     if (rpcCall) this.checkRpc(schema, rpcCall, scope);
@@ -388,7 +321,7 @@ export class Checker {
           : "";
         this.fail(
           tableExpr,
-          `unknown ${fromCall.name === "table" ? "table" : "relation"} "${tableName}" in schema "${schema}"${hint}`,
+          `unknown relation "${tableName}" in schema "${schema}"${hint}`,
         );
         return;
       }
@@ -447,20 +380,6 @@ export class Checker {
       return { keys: [], unresolved: true };
     }
     if (ts.isCallExpression(node)) {
-      const callee = unwrapExpr(node.expression);
-      const name = ts.isIdentifier(callee)
-        ? callee.text
-        : ts.isPropertyAccessExpression(callee)
-          ? callee.name.text
-          : null;
-      if ((name === "toInsert" || name === "toUpdate" || name === "toRow") && node.arguments[0]) {
-        const inner = this.collectKeys(node.arguments[0], scope, depth + 1);
-        if (!inner) return { keys: [], unresolved: true };
-        return {
-          keys: inner.keys.map(camelToSnake),
-          unresolved: inner.unresolved,
-        };
-      }
       if (this.tsChecker) {
         const names = propertyNamesFromType(this.tsChecker, node);
         if (names) return { keys: names, unresolved: false };
@@ -567,13 +486,13 @@ export class Checker {
         this.checkSelect(relation, method, embedAliases);
         break;
       case "insert":
-        this.checkPayload(relation, method.args[0], "insert", relation.insertColumns, scope, true, false, method.node);
+        this.checkPayload(relation, method.args[0], "insert", relation.insertColumns, scope, true, method.node);
         break;
       case "update":
-        this.checkPayload(relation, method.args[0], "update", relation.updateColumns, scope, false, false, method.node);
+        this.checkPayload(relation, method.args[0], "update", relation.updateColumns, scope, false, method.node);
         break;
       case "upsert":
-        this.checkPayload(relation, method.args[0], "upsert", relation.insertColumns, scope, false, false, method.node);
+        this.checkPayload(relation, method.args[0], "upsert", relation.insertColumns, scope, false, method.node);
         this.checkOnConflict(relation, method);
         break;
       case "match":
@@ -596,7 +515,6 @@ export class Checker {
     allowed: Set<string>,
     scope: Scope,
     checkRequired: boolean,
-    snakeCase: boolean,
     at: ts.Node,
     mode: "direct" | "callsite" = "direct",
   ): void {
@@ -607,15 +525,10 @@ export class Checker {
     if (this.subst.size > 0) {
       const node = unwrapExpr(expr);
       if (ts.isIdentifier(node) && isParameterIdentifier(node)) return;
-      if (ts.isCallExpression(node)) {
-        const callee = unwrapExpr(node.expression);
-        const name = ts.isIdentifier(callee) ? callee.text : ts.isPropertyAccessExpression(callee) ? callee.name.text : null;
-        if (name === "toInsert" || name === "toUpdate" || name === "toRow") return;
-      }
     }
     const collected = this.collectKeys(this.resolvePayload(expr, scope), scope);
     if (collected) {
-      const keys = collected.keys.map((k) => snakeCase ? camelToSnake(k) : k);
+      const keys = collected.keys;
       for (const key of keys) {
         if (!allowed.has(key)) {
           this.fail(expr, `${kind} on ${relKey(relation.schema, relation.name)}: unknown column "${key}"`);
@@ -631,8 +544,7 @@ export class Checker {
       const parsed = objectKeys(this.resolvePayload(expr, scope));
       if (parsed) {
         for (const key of parsed.keys) {
-          const col = snakeCase ? camelToSnake(key) : key;
-          this.checkLiteralDomain(relation, col, this.payloadValue(this.resolvePayload(expr, scope), key), expr, kind);
+          this.checkLiteralDomain(relation, key, this.payloadValue(this.resolvePayload(expr, scope), key), expr, kind);
         }
       }
       if (!collected.unresolved) return;
@@ -649,7 +561,6 @@ export class Checker {
           kind,
           allowed,
           checkRequired,
-          snakeCase,
           origin: expr,
           hits: 0,
           seenCalls: new Set(),
@@ -983,13 +894,6 @@ export function flushUnhitAnyPayloads(pending: PendingAnyPayload[], errors: Quer
       message: `${item.kind} on ${relKey(item.relation.schema, item.relation.name)}: dynamic payload`,
     });
   }
-}
-
-function functionName(fn: ts.FunctionLikeDeclaration): string | null {
-  if (fn.name && ts.isIdentifier(fn.name)) return fn.name.text;
-  const parent = fn.parent;
-  if (ts.isVariableDeclaration(parent) && ts.isIdentifier(parent.name)) return parent.name.text;
-  return null;
 }
 
 function stringifySubst(subst: Map<string, string>): string {

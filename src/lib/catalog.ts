@@ -61,7 +61,7 @@ function stringLiterals(node: ts.TypeNode | undefined): string[] {
   return [];
 }
 
-/** Database["funding_portal"]["Enums"]["escrow_environment"] */
+/** Database["public"]["Enums"]["status"] */
 function enumIndex(node: ts.TypeNode | undefined): { schema: string; name: string } | null {
   if (!node || !ts.isIndexedAccessTypeNode(node)) return null;
   const name = stringFromType(node.indexType);

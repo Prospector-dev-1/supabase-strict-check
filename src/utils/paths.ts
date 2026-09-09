@@ -65,10 +65,7 @@ export const QUERY_METHODS = new Set([
 ]);
 
 export const CLIENT_NAMES = new Set([
-  "supabaseAdmin",
-  "supabaseClient",
   "supabase",
+  "supabaseClient",
   "createClient",
 ]);
-
-export const COLUMN_HELPERS = new Set(["asColumn"]);

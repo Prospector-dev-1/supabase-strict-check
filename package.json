@@ -1,0 +1,29 @@
+{
+  "name": "supabase-strict-check",
+  "version": "0.1.0",
+  "description": "Static checker for PostgREST/Supabase client queries against generated Database types",
+  "license": "MIT",
+  "bin": {
+    "supabase-strict-check": "dist/index.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "start": "tsx src/index.ts",
+    "check:supabase": "tsx src/index.ts"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "typescript": "^5.9.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.3.0",
+    "tsx": "^4.20.5"
+  }
+}

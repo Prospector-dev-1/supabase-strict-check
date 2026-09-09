@@ -1,7 +1,8 @@
+#!/usr/bin/env node
 /**
  * Static PostgREST/Supabase checker.
  *
- *   npm run check:supabase -- --target=src --types=src/types/supabase.ts
+ *   npm start -- --target=src --types=src/types/supabase.ts
  *
  * Paths are from pwd. Omit flags to be prompted.
  */
