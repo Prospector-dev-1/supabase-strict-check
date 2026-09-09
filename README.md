@@ -15,7 +15,7 @@ supabase-strict-check --target=src --types=src/types/supabase.ts
 
 | Flag | Meaning |
 | --- | --- |
-| `--target` | Directory of TypeScript source to scan |
+| `--target` | Directory of TypeScript source to scan (`.ts`, `.tsx`) |
 | `--types` | Path to the generated Supabase types file (`export type Database = { ... }`) |
 
 Omit both flags to be prompted (TTY only).

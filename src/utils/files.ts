@@ -5,6 +5,14 @@ import ts from "typescript";
 
 import { unwrapExpr } from "./ast";
 
+function isScanFile(name: string): boolean {
+  return (name.endsWith(".ts") || name.endsWith(".tsx")) && !name.endsWith(".d.ts");
+}
+
+function scriptKindFor(file: string): ts.ScriptKind {
+  return file.endsWith(".tsx") ? ts.ScriptKind.TSX : ts.ScriptKind.TS;
+}
+
 export function collectSourceFiles(root: string, typesFile: string): string[] {
   const files: string[] = [];
   const walk = (dir: string): void => {
@@ -14,7 +22,7 @@ export function collectSourceFiles(root: string, typesFile: string): string[] {
       if (entry.isDirectory()) {
         if (entry.name === "node_modules" || entry.name === "dist") continue;
         walk(full);
-      } else if (entry.isFile() && entry.name.endsWith(".ts") && !entry.name.endsWith(".d.ts")) {
+      } else if (entry.isFile() && isScanFile(entry.name)) {
         files.push(full);
       }
     }
@@ -49,7 +57,9 @@ function resolveImport(fromFile: string, spec: string, srcDir: string): string |
   const candidates = [
     spec,
     spec + ".ts",
+    spec + ".tsx",
     path.join(spec, "index.ts"),
+    path.join(spec, "index.tsx"),
   ];
   for (const c of candidates) {
     if (fs.existsSync(c) && fs.statSync(c).isFile()) return c;
@@ -63,7 +73,7 @@ export function loadImportedConsts(files: string[], srcDir: string): Map<string,
   const local = new Map<string, Map<string, string>>();
 
   for (const file of files) {
-    const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+    const sf = ts.createSourceFile(file, fs.readFileSync(file, "utf8"), ts.ScriptTarget.Latest, true, scriptKindFor(file));
     parsed.set(file, sf);
     local.set(file, moduleStringConsts(sf));
   }
