@@ -52,9 +52,6 @@ Then run `npm run check:supabase`.
 
 Omit both flags to be prompted (TTY only).
 
-## License
-
-MIT. See [LICENSE](LICENSE).
 
 ## Contributing
 
